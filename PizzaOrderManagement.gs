@@ -109,7 +109,8 @@ function onFormSubmit(e) {
   
   try {
     // For form submissions, the event structure is different
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Form Responses 1');
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = spreadsheet.getSheetByName('Form responses 1') || spreadsheet.getSheetByName('Form Responses 1') || spreadsheet.getActiveSheet();
     var row;
     
     if (e && e.range) {
@@ -132,7 +133,7 @@ function onFormSubmit(e) {
     // Find important columns by header names
     var dueTimeColIndex = findColumnIndex(headers, "Due time");
     var prepTimeColIndex = findColumnIndex(headers, ["prep time", "preparation time", "Preparation time"]);
-    var statusColIndex = findColumnIndex(headers, "status");
+    var statusColIndex = findColumnIndex(headers, ["status", "Status"]);
     
     // If we couldn't find due time column, add it after Extra Toppings
     if (dueTimeColIndex === -1) {
@@ -199,9 +200,18 @@ function onFormSubmit(e) {
     
     // Get the timestamp from column A
     var timestamp = sheet.getRange(row, 1).getValue();
+    if (!timestamp || !(timestamp instanceof Date)) {
+      timestamp = new Date(); // Use current time if no valid timestamp
+      Logger.log("No valid timestamp found, using current time: " + timestamp);
+    }
+    
+    // Format and log the order time for debugging
+    var orderTimeFormatted = Utilities.formatDate(timestamp, Session.getScriptTimeZone(), "HH:mm:ss");
+    Logger.log("Order time: " + orderTimeFormatted);
     
     // Get preparation time, accounting for the form's structure
     var prepTimeRaw = sheet.getRange(row, prepTimeColIndex).getValue();
+    Logger.log("Raw preparation time: " + prepTimeRaw);
     
     // Get cells for due time and status
     var dueTimeCell = sheet.getRange(row, dueTimeColIndex);
@@ -209,6 +219,7 @@ function onFormSubmit(e) {
     
     // Convert prep time to number
     var prepTimeMinutes = extractPrepTime(prepTimeRaw);
+    Logger.log("Preparation time: " + prepTimeMinutes + " minutes");
     
     // Calculate due time
     var orderTime = new Date(timestamp);
@@ -216,6 +227,13 @@ function onFormSubmit(e) {
     
     // Format time as HH:mm
     var formattedTime = Utilities.formatDate(dueTime, Session.getScriptTimeZone(), "HH:mm");
+    Logger.log("Calculated due time: " + formattedTime + " (from order time: " + orderTime + ")");
+    
+    // Also log the calculation breakdown
+    Logger.log("Due time calculation: Order time (" + 
+               Utilities.formatDate(orderTime, Session.getScriptTimeZone(), "HH:mm:ss") + 
+               ") + " + prepTimeMinutes + " minutes = " + 
+               Utilities.formatDate(dueTime, Session.getScriptTimeZone(), "HH:mm:ss"));
     
     // Set the due time
     dueTimeCell.setValue(formattedTime);
@@ -225,9 +243,27 @@ function onFormSubmit(e) {
     if (currentTime > dueTime) {
       statusCell.setValue('Late');
       statusCell.setFontColor('red');
+      
+      // Highlight the entire row for late orders
+      sheet.getRange(row, 1, 1, sheet.getLastColumn()).setBackground('#ffcccc');
+      
+      Logger.log("Order is LATE, setting status to Late");
+    } else if ((dueTime.getTime() - currentTime.getTime()) < 300000) { // Less than 5 minutes
+      statusCell.setValue('Due Soon');
+      statusCell.setFontColor('orange');
+      
+      // Highlight with yellow for orders due soon
+      sheet.getRange(row, 1, 1, sheet.getLastColumn()).setBackground('#fff2cc');
+      
+      Logger.log("Order is DUE SOON, setting status to Due Soon");
     } else {
       statusCell.setValue('On Time');
       statusCell.setFontColor('black');
+      
+      // Clear any highlighting
+      sheet.getRange(row, 1, 1, sheet.getLastColumn()).setBackground(null);
+      
+      Logger.log("Order is ON TIME, setting status to On Time");
     }
     
     // Sort immediately after adding a new order

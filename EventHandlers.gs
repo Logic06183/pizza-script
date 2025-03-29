@@ -5,14 +5,14 @@ function onEdit(e) {
   var range = e.range;
   var sheet = range.getSheet();
   
-  // Only process edits on the Form Responses sheet
-  if (sheet.getName() !== 'Form Responses 1') {
+  // Only process edits on the Form responses sheet
+  if (sheet.getName() !== 'Form responses 1' && sheet.getName() !== 'Form Responses 1') {
     return;
   }
   
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var completedColIndex = findColumnIndex(headers, ["Completed", "Done", "finished"]);
-  var statusColIndex = findColumnIndex(headers, "status");
+  var statusColIndex = findColumnIndex(headers, ["status", "Status"]);
   
   if (completedColIndex === -1) completedColIndex = 10; // Default to column J
   if (statusColIndex === -1) statusColIndex = 9; // Default to column I
@@ -28,6 +28,9 @@ function onEdit(e) {
     if (checkboxChecked) {
       statusCell.setValue('Done');
       statusCell.setFontColor('green');
+      
+      // Clear the background color when completed
+      sheet.getRange(row, 1, 1, sheet.getLastColumn()).setBackground(null);
     } else {
       // Revert to appropriate status
       updateSingleOrderStatus(sheet, row, statusColIndex);

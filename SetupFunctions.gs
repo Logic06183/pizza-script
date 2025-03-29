@@ -36,12 +36,12 @@ function setupTriggers() {
     .create();
   Logger.log("Created sortOrdersByDueTime trigger (every 1 minute)");
   
-  // Update order statuses every 5 minutes
+  // Update order statuses every minute (changed from 5 minutes)
   ScriptApp.newTrigger('updateOrderStatuses')
     .timeBased()
-    .everyMinutes(5)
+    .everyMinutes(1)
     .create();
-  Logger.log("Created updateOrderStatuses trigger (every 5 minutes)");
+  Logger.log("Created updateOrderStatuses trigger (every 1 minute)");
   
   // Move past orders daily at midnight
   ScriptApp.newTrigger('movePastOrders')
@@ -66,7 +66,8 @@ function setupTriggers() {
  * Fix time formats in column H if they're not in proper format
  */
 function fixTimeFormats() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Form Responses 1');
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = spreadsheet.getSheetByName('Form responses 1') || spreadsheet.getSheetByName('Form Responses 1') || spreadsheet.getActiveSheet();
   if (!sheet) return;
   
   var lastRow = sheet.getLastRow();
@@ -85,14 +86,6 @@ function fixTimeFormats() {
       continue;
     }
     
-    // If it's a date object, format it as HH:mm
-    if (value instanceof Date && !isNaN(value.getTime())) {
-      var formattedTime = Utilities.formatDate(value, Session.getScriptTimeZone(), "HH:mm");
-      sheet.getRange(row, 8).setValue(formattedTime);
-      Logger.log("Fixed date in row " + row + " to format: " + formattedTime);
-      continue;
-    }
-    
     // Try to extract time if it's a string but not in the right format
     if (typeof value === 'string' && value.trim() !== '') {
       var match = value.match(/(\d{1,2})[: ](\d{2})/);
@@ -108,6 +101,69 @@ function fixTimeFormats() {
   
   // Sort after fixing formats
   sortOrdersByDueTime();
+  
+  Logger.log("Time formats fixed");
+}
+
+/**
+ * Fix date-time objects in due time column
+ * This will convert all date-time objects to HH:mm string format
+ */
+function fixDateObjects() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = spreadsheet.getSheetByName('Form responses 1') || spreadsheet.getSheetByName('Form Responses 1') || spreadsheet.getActiveSheet();
+  if (!sheet) return;
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return;
+  
+  Logger.log("Starting date object fix process");
+  
+  // Find the Due time column
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var dueTimeColIndex = findColumnIndex(headers, "Due time");
+  
+  if (dueTimeColIndex === -1) {
+    Logger.log("Due time column not found");
+    dueTimeColIndex = 8; // Default to column H
+  }
+  
+  // Get all values in the Due time column
+  var range = sheet.getRange(2, dueTimeColIndex, lastRow - 1, 1);
+  var values = range.getValues();
+  
+  var fixedCount = 0;
+  
+  for (var i = 0; i < values.length; i++) {
+    var value = values[i][0];
+    var row = i + 2; // Adjust for header row
+    
+    // If it's a date object, convert it to HH:mm string
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      var formattedTime = Utilities.formatDate(value, Session.getScriptTimeZone(), "HH:mm");
+      sheet.getRange(row, dueTimeColIndex).setValue(formattedTime);
+      Logger.log("Converted date object in row " + row + " to time string: " + formattedTime);
+      fixedCount++;
+    } else if (typeof value === 'string' && value.includes('1899')) {
+      // Handle cases where the date might be a string representation of a date
+      try {
+        var dateObj = new Date(value);
+        if (!isNaN(dateObj.getTime())) {
+          var formattedTime = Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "HH:mm");
+          sheet.getRange(row, dueTimeColIndex).setValue(formattedTime);
+          Logger.log("Converted date string in row " + row + " to time string: " + formattedTime);
+          fixedCount++;
+        }
+      } catch (e) {
+        Logger.log("Error processing date string in row " + row + ": " + e.message);
+      }
+    }
+  }
+  
+  Logger.log("Fixed " + fixedCount + " date objects in the Due time column");
+  
+  // Update order statuses after fixing date formats
+  updateOrderStatuses();
 }
 
 /**
@@ -137,6 +193,7 @@ function testAllFunctions() {
   
   // First fix any time format issues
   fixTimeFormats();
+  fixDateObjects();
   
   // Sort orders
   sortOrdersByDueTime();
