@@ -9,7 +9,9 @@ function updateOrderStatuses() {
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var currentTime = new Date();
   
-  Logger.log("Current time: " + currentTime.toTimeString());
+  // Format current time for clear logging
+  var currentTimeStr = Utilities.formatDate(currentTime, Session.getScriptTimeZone(), "HH:mm:ss");
+  Logger.log("Current time: " + currentTimeStr);
   
   var dueTimeColIndex = findColumnIndex(headers, "Due time");
   var statusColIndex = findColumnIndex(headers, ["status", "Status"]);
@@ -76,10 +78,17 @@ function updateOrderStatuses() {
       dueDateTime = new Date();
       dueDateTime.setHours(hours, minutes, 0, 0);
       
-      // Calculate time difference in minutes
-      var timeDiffMinutes = (dueDateTime.getTime() - currentTime.getTime()) / (1000 * 60);
+      // For strict time comparison, we'll use hours and minutes
+      var currentHours = currentTime.getHours();
+      var currentMinutes = currentTime.getMinutes();
+      var dueHours = hours;
+      var dueMinutes = minutes;
       
-      Logger.log("Row " + row + " due at " + dueTime + ", diff: " + timeDiffMinutes.toFixed(2) + " minutes");
+      // Calculate time difference in minutes, rounding down to nearest minute
+      var timeDiffMinutes = (dueHours * 60 + dueMinutes) - (currentHours * 60 + currentMinutes);
+      
+      var dueTimeStr = Utilities.formatDate(dueDateTime, Session.getScriptTimeZone(), "HH:mm:ss");
+      Logger.log("Row " + row + " due at " + dueTimeStr + ", current time: " + currentTimeStr + ", diff: " + timeDiffMinutes + " minutes");
       
       // If the due time appears to be in the future but the order is from yesterday,
       // adjust the due time to yesterday
@@ -95,20 +104,21 @@ function updateOrderStatuses() {
           dueDateTime.setFullYear(orderDate.getFullYear());
           
           // Recalculate time difference
-          timeDiffMinutes = (dueDateTime.getTime() - currentTime.getTime()) / (1000 * 60);
-          Logger.log("Adjusted due time for different day order, new diff: " + timeDiffMinutes.toFixed(2) + " minutes");
+          timeDiffMinutes = (dueHours * 60 + dueMinutes) - (currentHours * 60 + currentMinutes);
+          Logger.log("Adjusted due time for different day order, new diff: " + timeDiffMinutes + " minutes");
         }
       }
       
       // Update status and row highlighting based on time difference
+      // Only mark as late if current time is STRICTLY GREATER than due time based on hours and minutes
       if (timeDiffMinutes < 0) {
         // Order is late
         statusCell.setValue('Late');
         statusCell.setFontColor('red');
         entireRow.setBackground('#ffcccc'); // Light red background for the entire row
         Logger.log("Row " + row + " is LATE, setting red background");
-      } else if (timeDiffMinutes < 5) {
-        // Order is due soon (less than 5 minutes away)
+      } else if (timeDiffMinutes <= 5) { // Less than or equal to 5 minutes
+        // Order is due soon (5 minutes or less away)
         statusCell.setValue('Due Soon');
         statusCell.setFontColor('orange');
         entireRow.setBackground('#fff2cc'); // Light yellow background
@@ -124,20 +134,28 @@ function updateOrderStatuses() {
       // We have an actual Date object
       dueDateTime = dueTime;
       
-      // Calculate time difference in minutes
-      var timeDiffMinutes = (dueDateTime.getTime() - currentTime.getTime()) / (1000 * 60);
+      // For strict time comparison, we'll use hours and minutes
+      var currentHours = currentTime.getHours();
+      var currentMinutes = currentTime.getMinutes();
+      var dueHours = dueDateTime.getHours();
+      var dueMinutes = dueDateTime.getMinutes();
       
-      Logger.log("Row " + row + " due at " + dueDateTime.toTimeString() + ", diff: " + timeDiffMinutes.toFixed(2) + " minutes");
+      // Calculate time difference in minutes, rounding down to nearest minute
+      var timeDiffMinutes = (dueHours * 60 + dueMinutes) - (currentHours * 60 + currentMinutes);
+      
+      var dueTimeStr = Utilities.formatDate(dueDateTime, Session.getScriptTimeZone(), "HH:mm:ss");
+      Logger.log("Row " + row + " due at " + dueTimeStr + ", current time: " + currentTimeStr + ", diff: " + timeDiffMinutes + " minutes");
       
       // Update status based on time difference
+      // Only mark as late if current time is STRICTLY GREATER than due time
       if (timeDiffMinutes < 0) {
         // Order is late
         statusCell.setValue('Late');
         statusCell.setFontColor('red');
         entireRow.setBackground('#ffcccc'); // Light red background for the entire row
         Logger.log("Row " + row + " is LATE, setting red background");
-      } else if (timeDiffMinutes < 5) {
-        // Order is due soon (less than 5 minutes away)
+      } else if (timeDiffMinutes <= 5) { // Less than or equal to 5 minutes
+        // Order is due soon (5 minutes or less away)
         statusCell.setValue('Due Soon');
         statusCell.setFontColor('orange');
         entireRow.setBackground('#fff2cc'); // Light yellow background
@@ -157,10 +175,60 @@ function updateOrderStatuses() {
     }
   }
   
-  // Sort orders after updating statuses
-  sortOrdersByDueTime();
+  // Run the sorting function
+  trueTimeSort();
   
   Logger.log("updateOrderStatuses function completed");
+}
+
+/**
+ * Simpler and more accurate sort by due time
+ */
+function trueTimeSort() {
+  Logger.log("Starting trueTimeSort function");
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = spreadsheet.getSheetByName('Form responses 1') || 
+              spreadsheet.getSheetByName('Form Responses 1') || 
+              spreadsheet.getActiveSheet();
+  
+  if (!sheet) {
+    Logger.log("Form Responses sheet not found");
+    return;
+  }
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    Logger.log("No data to sort");
+    return;
+  }
+  
+  // Find the Due time and Status columns
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var dueTimeColIndex = -1;
+  var statusColIndex = -1;
+  
+  for (var i = 0; i < headers.length; i++) {
+    var headerText = String(headers[i] || '').toLowerCase();
+    if (headerText === 'due time') {
+      dueTimeColIndex = i + 1; // 1-based index
+    }
+    if (headerText === 'status') {
+      statusColIndex = i + 1; // 1-based index
+    }
+  }
+  
+  if (dueTimeColIndex === -1) {
+    Logger.log("Due time column not found");
+    return;
+  }
+  
+  // Sort the data range (excluding header)
+  var range = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
+  
+  // Simple sorting: sort by the "Due time" column (keep it simple)
+  range.sort({column: dueTimeColIndex, ascending: true});
+  
+  Logger.log("Finished sorting by due time");
 }
 
 /**

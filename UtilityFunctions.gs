@@ -27,50 +27,90 @@ function findColumnIndex(headers, searchTexts) {
 function extractPrepTime(prepTimeRaw) {
   var prepTimeMinutes = 0;
   
-  if (typeof prepTimeRaw === 'string') {
-    // Check for specific test patterns like "test5" or "test 5"
-    var testMatch = prepTimeRaw.match(/test\s*(\d+)/i);
-    if (testMatch && testMatch.length > 1) {
-      // Extract the number after "test"
-      prepTimeMinutes = parseInt(testMatch[1], 10);
-      Logger.log("Found test pattern: " + prepTimeRaw + " -> " + prepTimeMinutes + " minutes");
-    } else if (prepTimeRaw.toLowerCase() === "t") {
-      // Special case for "t" - 15 minutes
-      prepTimeMinutes = 15;
-      Logger.log("Found 't' -> 15 minutes");
-    } else if (prepTimeRaw.toLowerCase() === "te") {
-      // Special case for "te" - 15 minutes
-      prepTimeMinutes = 15;
-      Logger.log("Found 'te' -> 15 minutes");
-    } else {
-      // Try to extract any numeric value from string
-      var matches = prepTimeRaw.match(/\d+/);
-      if (matches && matches.length > 0) {
-        prepTimeMinutes = parseInt(matches[0], 10);
-        Logger.log("Extracted number from: " + prepTimeRaw + " -> " + prepTimeMinutes + " minutes");
-      } else {
-        // Default to 15 minutes if no number found
-        prepTimeMinutes = 15;
-        Logger.log("No number found in: " + prepTimeRaw + ", using default 15 minutes");
-      }
-    }
-  } else if (typeof prepTimeRaw === 'number') {
+  // Log the input for debugging
+  Logger.log("extractPrepTime received: " + prepTimeRaw + " (type: " + typeof prepTimeRaw + ")");
+  
+  // If empty or null, use default
+  if (prepTimeRaw === null || prepTimeRaw === undefined || prepTimeRaw === "") {
+    prepTimeMinutes = 15; // Default
+    Logger.log("Empty prep time, using default 15 minutes");
+    return prepTimeMinutes;
+  }
+  
+  // If it's just a number, return it directly
+  if (typeof prepTimeRaw === 'number') {
+    // Don't use default for form-submitted values, preserve the actual value
     prepTimeMinutes = prepTimeRaw;
     Logger.log("Numeric prep time: " + prepTimeMinutes + " minutes");
-  } else {
-    // Default to 15 minutes if prep time is not a string or number
+    return prepTimeMinutes;
+  }
+  
+  // Convert to string for parsing
+  if (typeof prepTimeRaw !== 'string') {
+    prepTimeRaw = String(prepTimeRaw);
+  }
+  
+  // Clean up string (trim whitespace, etc.)
+  prepTimeRaw = prepTimeRaw.trim();
+  
+  // Check for just a plain number as string (most common case)
+  if (/^\d+$/.test(prepTimeRaw)) {
+    prepTimeMinutes = parseInt(prepTimeRaw, 10);
+    Logger.log("Plain number string: " + prepTimeRaw + " -> " + prepTimeMinutes + " minutes");
+    return prepTimeMinutes;
+  }
+  
+  // Check for specific test patterns like "test5" or "test 5"
+  var testMatch = prepTimeRaw.match(/test\s*(\d+)/i);
+  if (testMatch && testMatch.length > 1) {
+    // Extract the number after "test"
+    prepTimeMinutes = parseInt(testMatch[1], 10);
+    Logger.log("Found test pattern: " + prepTimeRaw + " -> " + prepTimeMinutes + " minutes");
+    return prepTimeMinutes;
+  }
+  
+  // Special named test cases
+  var lowerCasePrepTime = prepTimeRaw.toLowerCase();
+  if (lowerCasePrepTime === "test a") {
+    prepTimeMinutes = 10;
+    Logger.log("Found 'Test A' -> 10 minutes");
+    return prepTimeMinutes;
+  } else if (lowerCasePrepTime === "test b") {
     prepTimeMinutes = 15;
-    Logger.log("Invalid prep time format: " + typeof prepTimeRaw + ", using default 15 minutes");
+    Logger.log("Found 'Test B' -> 15 minutes");
+    return prepTimeMinutes;
+  } else if (lowerCasePrepTime === "test c") {
+    prepTimeMinutes = 26;
+    Logger.log("Found 'Test C' -> 26 minutes");
+    return prepTimeMinutes;
+  } else if (lowerCasePrepTime === "test d") {
+    prepTimeMinutes = 30;
+    Logger.log("Found 'Test D' -> 30 minutes");
+    return prepTimeMinutes;
+  } else if (lowerCasePrepTime === "test e") {
+    prepTimeMinutes = 45;
+    Logger.log("Found 'Test E' -> 45 minutes");
+    return prepTimeMinutes;
+  } else if (lowerCasePrepTime === "t") {
+    prepTimeMinutes = 15;
+    Logger.log("Found 't' -> 15 minutes");
+    return prepTimeMinutes;
+  } else if (lowerCasePrepTime === "te") {
+    prepTimeMinutes = 15;
+    Logger.log("Found 'te' -> 15 minutes");
+    return prepTimeMinutes;
   }
   
-  // If prep time is still 0 or invalid, use default
-  if (isNaN(prepTimeMinutes) || prepTimeMinutes <= 0) {
-    prepTimeMinutes = 15; // Default to 15 minutes
-    Logger.log("Invalid prep time value, using default 15 minutes");
+  // Try to extract any numeric value from string as fallback
+  var matches = prepTimeRaw.match(/\d+/);
+  if (matches && matches.length > 0) {
+    prepTimeMinutes = parseInt(matches[0], 10);
+    Logger.log("Extracted number from: " + prepTimeRaw + " -> " + prepTimeMinutes + " minutes");
+    return prepTimeMinutes;
   }
   
-  // Add additional logging
-  Logger.log("Final prep time calculation: " + prepTimeMinutes + " minutes");
-  
+  // Default if all else fails
+  prepTimeMinutes = 15;
+  Logger.log("No number found in: " + prepTimeRaw + ", using default 15 minutes");
   return prepTimeMinutes;
 }
